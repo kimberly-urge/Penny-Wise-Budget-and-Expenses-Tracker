@@ -1,199 +1,156 @@
-import datetime
+import csv
+from datetime import datetime, timedelta
 
-# List for the transactions
-transactions = []
 
-CATEGORIES = ["food", "entertainment", "transport", "salary", "miscellaneous"]
+class RecurringTransactionManager:
+    def __init__(self):
+        self.recurring_transactions = []  # List to store recurring transaction data
+        self.transactions = []  # List to store processed transactions
 
-def print_boxed(text_lines):
-    """Prints text neatly within a box."""
-    max_len = max(len(line) for line in text_lines)
-    print("+" + "-" * (max_len + 2) + "+")
-    for line in text_lines:
-        print(f"| {line.ljust(max_len)} |")
-    print("+" + "-" * (max_len + 2) + "+")
-
-def add_transaction():
-    print_boxed(["Add a Transaction"])
-    t_type = input("Enter type (income/expense): ").strip().lower()
-    if t_type not in ['income', 'expense']:
-        print("Invalid type. Must be 'income' or 'expense'.")
-        return
-
-    try:
-        amount = float(input("Enter amount: ").strip())
-        if amount <= 0:
-            print("Amount must be a positive number.")
-            return
-    except ValueError:
-        print("Invalid amount. Please enter a number.")
-        return
-
-    category = input(f"Enter category {CATEGORIES}: ").strip().lower()
-    if category not in CATEGORIES:
-        print(f"Invalid category. Must be one of {CATEGORIES}.")
-        return
-
-    date_input = input("Enter date (YYYY-MM-DD): ").strip()
-    try:
-        date = datetime.datetime.strptime(date_input, "%Y-%m-%d").date()
-    except ValueError:
-        print("Invalid date format. Use YYYY-MM-DD.")
-        return
-
-    # Store the transaction
-    transaction = {
-        "type": t_type,
-        "amount": amount,
-        "category": category,
-        "date": date
-    }
-    transactions.append(transaction)
-    print("Transaction added successfully!")
-
-def view_transactions():
-    if not transactions:
-        print_boxed(["No transactions found."])
-        return
-
-    lines = ["All Transactions:"]
-    for idx, transaction in enumerate(transactions, start=1):
-        lines.append(f"{idx}. {transaction['type'].capitalize()} - {transaction['amount']} ({transaction['category']}) on {transaction['date']}")
-    print_boxed(lines)
-
-def view_transactions_by_month():
-    if not transactions:
-        print_boxed(["No transactions found."])
-        return
-
-    try:
-        month_input = input("Enter the month and year to filter (MM-YYYY): ").strip()
-        month_year = datetime.datetime.strptime(month_input, "%m-%Y")
-    except ValueError:
-        print("Invalid format. Use MM-YYYY.")
-        return
-
-    filtered_transactions = [
-        t for t in transactions
-        if t['date'].month == month_year.month and t['date'].year == month_year.year
-    ]
-
-    if not filtered_transactions:
-        print_boxed([f"No transactions found for {month_year.strftime('%B %Y')}."])
-        return
-
-    lines = [f"Transactions for {month_year.strftime('%B %Y')}:"]
-
-    for idx, transaction in enumerate(filtered_transactions, start=1):
-        lines.append(f"{idx}. {transaction['type'].capitalize()} - {transaction['amount']} ({transaction['category']}) on {transaction['date']}")
-    print_boxed(lines)
-
-def update_transaction():
-    if not transactions:
-        print_boxed(["No transactions to update."])
-        return
-
-    view_transactions()  # Display transactions to select from
-    try:
-        transaction_index = int(input("Enter the transaction number to update: ")) - 1
-        if transaction_index < 0 or transaction_index >= len(transactions):
-            print("Invalid transaction number.")
-            return
-    except ValueError:
-        print("Invalid input. Please enter a valid transaction number.")
-        return
-
-    transaction = transactions[transaction_index]
-
-    print("Leave fields blank to keep the current value.")
-
-    t_type = input(f"Enter type (income/expense) [{transaction['type']}]: ").strip().lower()
-    if t_type and t_type not in ['income', 'expense']:
-        print("Invalid type. Must be 'income' or 'expense'.")
-        return
-    transaction['type'] = t_type if t_type else transaction['type']
-
-    amount_input = input(f"Enter amount [{transaction['amount']}]: ").strip()
-    if amount_input:
+    def add_recurring_transaction(self):
+        """Add a recurring transaction."""
         try:
-            amount = float(amount_input)
-            if amount <= 0:
-                print("Amount must be a positive number.")
+            trans_type = input("Enter transaction type (income/expense): ").strip().lower()
+            if trans_type not in ['income', 'expense']:
+                print("Invalid type. Must be 'income' or 'expense'.")
                 return
-            transaction['amount'] = amount
+
+            category = input("Enter category (e.g., Rent, Subscription): ").strip()
+            amount = float(input(f"Enter amount for {category}: "))
+            if amount <= 0:
+                print("Amount must be greater than zero.")
+                return
+
+            interval = input("Enter interval (daily/weekly/monthly/yearly): ").strip().lower()
+            if interval not in ['daily', 'weekly', 'monthly', 'yearly']:
+                print("Invalid interval. Must be 'daily', 'weekly', 'monthly', or 'yearly'.")
+                return
+
+            start_date = input("Enter start date (YYYY-MM-DD): ").strip()
+            try:
+                next_due = datetime.strptime(start_date, "%Y-%m-%d").date()
+            except ValueError:
+                print("Invalid date format. Use YYYY-MM-DD.")
+                return
+
+            self.recurring_transactions.append({
+                "type": trans_type,
+                "category": category,
+                "amount": amount,
+                "interval": interval,
+                "next_due": next_due
+            })
+            print(f"Recurring transaction for '{category}' added successfully.")
         except ValueError:
-            print("Invalid amount. Please enter a number.")
+            print("Invalid input. Please enter valid numbers for the amount.")
+
+    def process_recurring_transactions(self):
+        """Process recurring transactions that are due."""
+        current_date = datetime.now().date()
+        processed_transactions = []
+
+        for transaction in self.recurring_transactions:
+            while transaction["next_due"] <= current_date:
+                # Add to processed transactions
+                self.transactions.append({
+                    "type": transaction["type"],
+                    "category": transaction["category"],
+                    "amount": transaction["amount"],
+                    "date": transaction["next_due"]
+                })
+                processed_transactions.append({
+                    "type": transaction["type"],
+                    "category": transaction["category"],
+                    "amount": transaction["amount"],
+                    "date": transaction["next_due"]
+                })
+
+                # Update next due date
+                transaction["next_due"] = self.calculate_next_due_date(transaction["next_due"], transaction["interval"])
+
+        if processed_transactions:
+            print("\nProcessed Transactions:")
+            for trans in processed_transactions:
+                print(f"{trans['date']}: {trans['type']} - {trans['category']} (${trans['amount']})")
+        else:
+            print("No recurring transactions to process today.")
+
+    @staticmethod
+    def calculate_next_due_date(current_date, interval):
+        """Calculate the next due date based on the interval."""
+        if interval == "daily":
+            return current_date + timedelta(days=1)
+        elif interval == "weekly":
+            return current_date + timedelta(weeks=1)
+        elif interval == "monthly":
+            next_month = current_date.month % 12 + 1
+            year_increment = (current_date.month + 1) // 13
+            return current_date.replace(month=next_month, year=current_date.year + year_increment)
+        elif interval == "yearly":
+            return current_date.replace(year=current_date.year + 1)
+
+    def view_recurring_transactions(self):
+        """View all recurring transactions."""
+        if not self.recurring_transactions:
+            print("No recurring transactions set.")
             return
+        print("\nRecurring Transactions:")
+        for trans in self.recurring_transactions:
+            print(f"{trans['type'].capitalize()} - {trans['category']} (${trans['amount']}), "
+                  f"Interval: {trans['interval']}, Next Due: {trans['next_due']}")
 
-    category = input(f"Enter category {CATEGORIES} [{transaction['category']}]: ").strip().lower()
-    if category and category not in CATEGORIES:
-        print(f"Invalid category. Must be one of {CATEGORIES}.")
-        return
-    transaction['category'] = category if category else transaction['category']
+    def view_processed_transactions(self):
+        """View all processed transactions."""
+        if not self.transactions:
+            print("No transactions processed yet.")
+            return
+        print("\nProcessed Transactions:")
+        for trans in self.transactions:
+            print(f"{trans['date']}: {trans['type'].capitalize()} - {trans['category']} (${trans['amount']})")
 
-    date_input = input(f"Enter date (YYYY-MM-DD) [{transaction['date']}]: ").strip()
-    if date_input:
+    def export_transactions(self, filename="transactions.csv"):
+        """Export all transactions to a CSV file."""
         try:
-            date = datetime.datetime.strptime(date_input, "%Y-%m-%d").date()
-            transaction['date'] = date
-        except ValueError:
-            print("Invalid date format. Use YYYY-MM-DD.")
-            return
+            with open(filename, mode='w', newline='') as file:
+                writer = csv.writer(file)
+                writer.writerow(["Date", "Type", "Category", "Amount"])
+                for trans in self.transactions:
+                    writer.writerow([trans["date"], trans["type"], trans["category"], trans["amount"]])
+            print(f"Transactions exported successfully to '{filename}'.")
+        except Exception as e:
+            print(f"Error exporting transactions: {e}")
 
-    print("Transaction updated successfully!")
-
-def delete_transaction():
-    if not transactions:
-        print_boxed(["No transactions to delete."])
-        return
-
-    view_transactions()  # Display transactions to select from
-    try:
-        transaction_index = int(input("Enter the transaction number to delete: ")) - 1
-        if transaction_index < 0 or transaction_index >= len(transactions):
-            print("Invalid transaction number.")
-            return
-    except ValueError:
-        print("Invalid input. Please enter a valid transaction number.")
-        return
-
-    # Confirm deletion
-    transaction = transactions[transaction_index]
-    confirm = input(f"Are you sure you want to delete this transaction? (yes/no): ").strip().lower()
-    if confirm == "yes":
-        del transactions[transaction_index]
-        print("Transaction deleted successfully!")
-    else:
-        print("Transaction not deleted.")
 
 def main():
-    while True:
-        print_boxed([
-            "Transaction Tracker",
-            "1. Add a Transaction",
-            "2. View Transactions",
-            "3. View Transactions by Month",
-            "4. Update a Transaction",
-            "5. Delete a Transaction",
-            "6. Exit"
-        ])
+    manager = RecurringTransactionManager()
 
-        choice = input("Choose an option: ").strip()
+    while True:
+        print("\n--- Recurring Transaction Manager ---")
+        print("1. Add Recurring Transaction")
+        print("2. Process Recurring Transactions")
+        print("3. View Recurring Transactions")
+        print("4. View Processed Transactions")
+        print("5. Export Processed Transactions")
+        print("6. Exit")
+
+        choice = input("Choose an option (1-6): ").strip()
         if choice == "1":
-            add_transaction()
+            manager.add_recurring_transaction()
         elif choice == "2":
-            view_transactions()
+            manager.process_recurring_transactions()
         elif choice == "3":
-            view_transactions_by_month()
+            manager.view_recurring_transactions()
         elif choice == "4":
-            update_transaction()
+            manager.view_processed_transactions()
         elif choice == "5":
-            delete_transaction()
+            manager.export_transactions()
         elif choice == "6":
-            print("Goodbye!")
+            print("Exiting Recurring Transaction Manager. Goodbye!")
             break
         else:
-            print("Invalid choice. Please try again.")
+            print("Invalid choice. Please enter a number between 1 and 6.")
+
 
 if __name__ == "__main__":
     main()
+()
