@@ -1,4 +1,4 @@
-# Penny-Wise-Budget-and-Expenses-Tracker
+# Penny-Wise
 Penny Wise is a user-friendly budget and transaction management system designed to help users track their income, expenses, and budgets effectively.
 
 
