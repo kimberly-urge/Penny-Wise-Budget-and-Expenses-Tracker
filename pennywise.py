@@ -1,5 +1,8 @@
+import csv
 import datetime
 
+users_file = "users.csv"
+transactions_file = "transactions.csv"
 users = {}
 logged_in_users = {}
 transactions = []
@@ -7,14 +10,53 @@ categories = ["Food", "Transport", "Entertainment", "Utilities"]
 budgets = {}
 
 # Helper Functions
-def print_boxed(text_lines):
-    """Prints text neatly within a box."""
-    max_len = max(len(line) for line in text_lines)
-    print("+" + "-" * (max_len + 2) + "+")
-    for line in text_lines:
-        print(f"| {line.ljust(max_len)} |")
-    print("+" + "-" * (max_len + 2) + "+")
+def save_users():
+    """Save user data to CSV file."""
+    with open(users_file, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["username", "password"])
+        for username, password in users.items():
+            writer.writerow([username, password])
 
+def load_users():
+    """Load user data from CSV file."""
+    try:
+        with open(users_file, "r") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                users[row["username"]] = row["password"]
+    except FileNotFoundError:
+        pass
+
+def save_transactions():
+    """Save transactions to CSV file."""
+    with open(transactions_file, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["username", "type", "amount", "category", "date"])
+        for transaction in transactions:
+            writer.writerow([
+                transaction["username"],
+                transaction["type"],
+                transaction["amount"],
+                transaction["category"],
+                transaction["date"],
+            ])
+
+def load_transactions():
+    """Load transactions from CSV file."""
+    try:
+        with open(transactions_file, "r") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                transactions.append({
+                    "username": row["username"],
+                    "type": row["type"],
+                    "amount": float(row["amount"]),
+                    "category": row["category"],
+                    "date": datetime.datetime.strptime(row["date"], "%Y-%m-%d").date(),
+                })
+    except FileNotFoundError:
+        pass
 
 def register():
     print("\n--- REGISTER ---")
@@ -24,6 +66,7 @@ def register():
         return
     password = input("Enter password: ").strip()
     users[username] = password
+    save_users()
     print(f"✅ User '{username}' registered successfully!")
 
 def login():
@@ -47,7 +90,6 @@ def logout(username):
     else:
         print("⚠️  You are not logged in.")
 
-
 def add_transaction(username):
     print("\n--- ADD TRANSACTION ---")
     transaction_type = input("Enter transaction type (income/expense): ").strip().lower()
@@ -70,21 +112,16 @@ def add_transaction(username):
         print("⚠️  Invalid date format. Use YYYY-MM-DD.")
         return
 
-    if transaction_type == "expense" and category in budgets:
-        projected_spent = budgets[category]["spent"] + amount
-        if projected_spent > budgets[category]["limit"]:
-            print(f"⚠️  Budget Alert! You are about to exceed the budget for '{category}'.")
-            print(f"Current Spent: ₱{budgets[category]['spent']}, New Total: ₱{projected_spent}, Limit: ₱{budgets[category]['limit']}")
-            proceed = input("Do you want to continue with this transaction? (yes/no): ").strip().lower()
-            if proceed != "yes":
-                print("⚠️  Transaction canceled.")
-                return
-
-    transaction = {"username": username, "type": transaction_type, "amount": amount, "category": category, "date": date}
+    transaction = {
+        "username": username,
+        "type": transaction_type,
+        "amount": amount,
+        "category": category,
+        "date": date,
+    }
     transactions.append(transaction)
+    save_transactions()
     print("✅ Transaction added successfully!")
-    if transaction_type == "expense" and category in budgets:
-        budgets[category]["spent"] += amount
 
 def view_transactions(username):
     print("\n--- YOUR TRANSACTIONS ---")
@@ -95,20 +132,25 @@ def view_transactions(username):
     print(f"\n📊 Transactions for {username}:")
     print("-" * 50)
     for i, transaction in enumerate(user_transactions, start=1):
-        print(f"{i}. Type: {transaction['type'].capitalize()}, Amount: ₱{transaction['amount']:.2f}, "
-              f"Category: {transaction['category']}, Date: {transaction['date']}")
+        print(
+            f"{i}. Type: {transaction['type'].capitalize()}, Amount: ₱{transaction['amount']:.2f}, "
+            f"Category: {transaction['category']}, Date: {transaction['date']}"
+        )
     print("-" * 50)
 
 def delete_transaction(username):
     print("\n--- DELETE TRANSACTION ---")
     view_transactions(username)
-    if not transactions:
+    user_transactions = [t for t in transactions if t["username"] == username]
+    if not user_transactions:
         return
     try:
         transaction_index = int(input(f"Enter the number of the transaction to delete: ")) - 1
-        if 0 <= transaction_index < len(transactions):
-            deleted_transaction = transactions.pop(transaction_index)
-            print(f"✅ Transaction '{deleted_transaction['type'].capitalize()} - ₱{deleted_transaction['amount']}' deleted.")
+        if 0 <= transaction_index < len(user_transactions):
+            transaction_to_delete = user_transactions[transaction_index]
+            transactions.remove(transaction_to_delete)
+            save_transactions()
+            print(f"✅ Transaction deleted.")
         else:
             print("⚠️  Invalid transaction number.")
     except ValueError:
@@ -117,99 +159,91 @@ def delete_transaction(username):
 def update_transaction(username):
     print("\n--- UPDATE TRANSACTION ---")
     view_transactions(username)
-    if not transactions:
+    user_transactions = [t for t in transactions if t["username"] == username]
+    if not user_transactions:
         return
     try:
         transaction_index = int(input(f"Enter the number of the transaction to update: ")) - 1
-        if 0 <= transaction_index < len(transactions):
-            transaction = transactions[transaction_index]
+        if 0 <= transaction_index < len(user_transactions):
+            transaction = user_transactions[transaction_index]
             print(f"Current details: {transaction}")
-            print("What would you like to update?")
-            update_choice = input("Type 'amount', 'category', or 'date' to update, or 'cancel' to cancel: ").strip().lower()
-            if update_choice == "amount":
-                try:
-                    new_amount = float(input("Enter the new amount: "))
-                    transaction["amount"] = new_amount
-                except ValueError:
-                    print("⚠️  Invalid amount. Please enter a numeric value.")
-            elif update_choice == "category":
-                new_category = input(f"Enter the new category {categories}: ").strip()
-                if new_category in categories:
-                    transaction["category"] = new_category
-                else:
-                    print(f"⚠️  Invalid category. Choose one from {categories}.")
-            elif update_choice == "date":
-                new_date_input = input("Enter the new transaction date (YYYY-MM-DD): ").strip()
-                try:
-                    new_date = datetime.datetime.strptime(new_date_input, "%Y-%m-%d").date()
-                    transaction["date"] = new_date
-                except ValueError:
-                    print("⚠️  Invalid date format. Use YYYY-MM-DD.")
-            elif update_choice == "cancel":
-                print("⚠️  Update cancelled.")
+            update_field = input("What would you like to update? (type/amount/category/date): ").strip().lower()
+            if update_field == "type":
+                transaction["type"] = input("Enter new type (income/expense): ").strip().lower()
+            elif update_field == "amount":
+                transaction["amount"] = float(input("Enter new amount: ").strip())
+            elif update_field == "category":
+                transaction["category"] = input(f"Enter new category {categories}: ").strip()
+            elif update_field == "date":
+                date_input = input("Enter new date (YYYY-MM-DD): ").strip()
+                transaction["date"] = datetime.datetime.strptime(date_input, "%Y-%m-%d").date()
             else:
-                print("⚠️  Invalid choice.")
-            print(f"✅ Transaction updated: {transaction}")
+                print("⚠️  Invalid field.")
+                return
+            save_transactions()
+            print("✅ Transaction updated successfully!")
         else:
             print("⚠️  Invalid transaction number.")
     except ValueError:
         print("⚠️  Please enter a valid number.")
 
+def set_budget():
+    print("\n--- SET BUDGET ---")
+    category = input(f"Enter category {categories}: ").strip()
+    if category not in categories:
+        print(f"⚠️  Invalid category. Must be one of {categories}.")
+        return
+    try:
+        limit = float(input(f"Enter budget limit for '{category}': "))
+        budgets[category] = {"limit": limit, "spent": 0}
+        print(f"✅ Budget for '{category}' set to ₱{limit:.2f}.")
+    except ValueError:
+        print("⚠️  Invalid amount. Please enter a numeric value.")
 
-class BudgetManager:
-    def __init__(self):
-        self.budgets = {}  # Stores budget limits for each category
+def view_budget_status():
+    print("\n--- BUDGET STATUS ---")
+    if not budgets:
+        print("📂 No budgets set.")
+        return
+    for category, budget in budgets.items():
+        spent = sum(
+            t["amount"] for t in transactions if t["category"] == category and t["type"] == "expense"
+        )
+        remaining = budget["limit"] - spent
+        print(f"{category.capitalize()}: Limit = ₱{budget['limit']}, Spent = ₱{spent}, Remaining = ₱{remaining:.2f}")
+    print("-" * 50)
 
-    def set_budget(self):
-        """Set a budget limit for a category."""
-        category = input(f"Enter category {categories}: ").strip()
-        if category not in categories:
-            print(f"⚠️  Invalid category. Must be one of {categories}.")
-            return
-        try:
-            amount = float(input(f"Enter budget amount for {category}: "))
-        except ValueError:
-            print("⚠️  Invalid amount. Please enter a numeric value.")
-            return
-        budgets[category] = {"limit": amount, "spent": 0}
-        print(f"✅ Budget for '{category}' set to ₱{amount}.")
+def financial_summary(username):
+    print("\n--- FINANCIAL SUMMARY ---")
+    user_transactions = [t for t in transactions if t["username"] == username]
+    if not user_transactions:
+        print("📂 No transactions found.")
+        return
 
-    def view_budget_status(self):
-        print("\n--- BUDGET STATUS ---")
-        if not budgets:
-            print("📂 No budgets set.")
-            return
-        for category, budget in budgets.items():
-            remaining = budget["limit"] - budget["spent"]
-            print(f"{category.capitalize()}: Limit = ₱{budget['limit']}, Spent = ₱{budget['spent']}, Remaining = ₱{remaining}")
-        print("-" * 50)
+    total_income = sum(t["amount"] for t in user_transactions if t["type"] == "income")
+    total_expense = sum(t["amount"] for t in user_transactions if t["type"] == "expense")
+    net_balance = total_income - total_expense
 
-    def financial_summary(self, username):
-        print("\n--- FINANCIAL SUMMARY ---")
-        user_transactions = [t for t in transactions if t["username"] == username]
-        if not user_transactions:
-            print("📂 No transactions found.")
-            return
-        total_income = sum(t["amount"] for t in user_transactions if t["type"] == "income")
-        total_expense = sum(t["amount"] for t in user_transactions if t["type"] == "expense")
-        net_balance = total_income - total_expense
-        print(f"Total Income: ₱{total_income:.2f}")
-        print(f"Total Expenses: ₱{total_expense:.2f}")
-        print(f"Net Balance: ₱{net_balance:.2f}")
+    print(f"Total Income: ₱{total_income:.2f}")
+    print(f"Total Expenses: ₱{total_expense:.2f}")
+    print(f"Net Balance: ₱{net_balance:.2f}")
 
-        # Show Budget Status per Category
-        print("\nCategory Budget Status:")
-        for category in categories:
-            category_spent = sum(t["amount"] for t in user_transactions if t["category"] == category and t["type"] == "expense")
-            if category in budgets:
-                remaining_budget = budgets[category]["limit"] - category_spent
-                print(f"{category.capitalize()}: Spent = ₱{category_spent:.2f}, Remaining = ₱{remaining_budget:.2f}")
-            else:
-                print(f"{category.capitalize()}: No budget set.")
-        print("-" * 50)
+    print("\nCategory Budget Status:")
+    for category in categories:
+        category_expenses = sum(
+            t["amount"] for t in user_transactions if t["type"] == "expense" and t["category"] == category
+        )
+        if category in budgets:
+            limit = budgets[category]["limit"]
+            remaining = max(0, limit - category_expenses)
+            print(f"{category.capitalize()}: Spent = ₱{category_expenses:.2f}, Remaining = ₱{remaining:.2f}")
+        else:
+            print(f"{category.capitalize()}: No budget set.")
+    print("-" * 50)
 
-# Main Menu
 def main_menu():
+    load_users()
+    load_transactions()
     while True:
         print("\n===============================")
         print("🪙    WELCOME TO PENNY WISE!  🪙")
@@ -232,7 +266,6 @@ def main_menu():
             print("⚠️  Invalid choice. Please try again.")
 
 def logged_in_menu(username):
-    budget_manager = BudgetManager()
     while True:
         print("\n===============================")
         print(f"📌 PENNY WISER BOARD: {username.upper()}")
@@ -256,11 +289,11 @@ def logged_in_menu(username):
         elif choice == "4":
             delete_transaction(username)
         elif choice == "5":
-            budget_manager.set_budget()
+            set_budget()
         elif choice == "6":
-            budget_manager.view_budget_status()
+            view_budget_status()
         elif choice == "7":
-            budget_manager.financial_summary(username)
+            financial_summary(username)
         elif choice == "8":
             logout(username)
             break
