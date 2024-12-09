@@ -8,6 +8,8 @@ logged_in_users = {}
 transactions = []
 categories = ["Food", "Transport", "Entertainment", "Utilities"]
 budgets = {}
+user_balances = {}
+user_income_periods = {}
 
 # Helper Functions
 def save_users():
@@ -96,47 +98,144 @@ def add_transaction(username):
     if transaction_type not in ["income", "expense"]:
         print("⚠️  Invalid transaction type. Please enter 'income' or 'expense'.")
         return
+
     try:
         amount = float(input("Enter transaction amount: ").strip())
+        if amount <= 0:
+            raise ValueError
     except ValueError:
-        print("⚠️  Invalid amount. Please enter a numeric value.")
-        return
-    category = input(f"Enter category {categories}: ").strip()
-    if category not in categories:
-        print(f"⚠️  Invalid category. Must be one of {categories}.")
-        return
-    date_input = input("Enter transaction date (YYYY-MM-DD): ").strip()
-    try:
-        date = datetime.datetime.strptime(date_input, "%Y-%m-%d").date()
-    except ValueError:
-        print("⚠️  Invalid date format. Use YYYY-MM-DD.")
+        print("⚠️  Amount must be a positive number.")
         return
 
-    transaction = {
-        "username": username,
-        "type": transaction_type,
-        "amount": amount,
-        "category": category,
-        "date": date,
-    }
-    transactions.append(transaction)
-    save_transactions()
-    print("✅ Transaction added successfully!")
+    if transaction_type == "income":
+        period = input("Enter period (week/month): ").strip().lower()
+        if period not in ["week", "month"]:
+            print("⚠️  Invalid period. Please enter 'week' or 'month'.")
+            return
+        try:
+            start_date = datetime.datetime.strptime(input("Enter start date (YYYY-MM-DD): ").strip(), "%Y-%m-%d").date()
+        except ValueError:
+            print("⚠️  Invalid date format. Use YYYY-MM-DD.")
+            return
+        user_balances[username] = user_balances.get(username, 0) + amount
+        user_income_periods[username] = {"start_date": start_date, "period_type": period}
+        transactions.append({
+            "username": username,
+            "type": "income",
+            "amount": amount,
+            "category": "Income",  # Default category for income
+            "date": datetime.date.today(),
+        })
+        save_transactions()
+        print(f"✅ Income added. Balance: ₱{user_balances[username]:.2f}")
+
+    elif transaction_type == "expense":
+        if user_balances.get(username, 0) <= 0:
+            print("⚠️  No balance available. Add income first.")
+            return
+        
+        try:
+            date = datetime.datetime.strptime(input("Enter transaction date (YYYY-MM-DD): ").strip(), "%Y-%m-%d").date()
+        except ValueError:
+            print("⚠️  Invalid date format. Use YYYY-MM-DD.")
+            return
+
+        # Allow user to input a custom category or select from suggestions
+        print(f"Suggested categories: {', '.join(categories)}")
+        category = input(f"Enter category (or press Enter to use custom category): ").strip()
+
+        # If the category is not in the suggested categories, it's considered a custom category
+        if category and category not in categories:
+            print(f"✅ Custom category '{category}' selected.")
+        elif category in categories:
+            print(f"✅ Category '{category}' selected.")
+        else:
+            print("⚠️  Invalid category. Choose from the list or input a custom category.")
+            return
+        
+        if amount > user_balances[username]:
+            print("⚠️  Insufficient balance.")
+            return
+        
+        user_balances[username] -= amount
+        transactions.append({
+            "username": username,
+            "type": "expense",
+            "amount": amount,
+            "category": category if category else "Uncategorized",  # Use custom or default category
+            "date": date,
+        })
+        save_transactions()
+        print(f"✅ Expense recorded. Remaining balance: ₱{user_balances[username]:.2f}")
+
+
 
 def view_transactions(username):
-    print("\n--- YOUR TRANSACTIONS ---")
+    print("\n--- VIEW TRANSACTIONS ---")
     user_transactions = [t for t in transactions if t["username"] == username]
     if not user_transactions:
         print("📂 No transactions found.")
         return
-    print(f"\n📊 Transactions for {username}:")
-    print("-" * 50)
-    for i, transaction in enumerate(user_transactions, start=1):
+
+    # Get user's income and period
+    total_income = sum(t["amount"] for t in user_transactions if t["type"] == "income")
+    income_period = user_income_periods.get(username, None)
+    
+    remaining_balance = 0
+    if income_period:
+        period_type = income_period["period_type"]
+        start_date = income_period["start_date"]
+        # Calculate how much time has passed since the income was set
+        today = datetime.date.today()
+        if period_type == "month":
+            # Calculate remaining balance for the month
+            days_in_month = (today.replace(day=28) + datetime.timedelta(days=4)).day  # Get number of days in current month
+            remaining_days = max(0, days_in_month - today.day)
+        elif period_type == "week":
+            # Calculate remaining balance for the week
+            days_in_week = 7
+            remaining_days = max(0, (start_date + datetime.timedelta(days=days_in_week)).day - today.day)
+        
+        # Calculate remaining balance for that period
+        remaining_balance = total_income - sum(t["amount"] for t in user_transactions if t["type"] == "expense")
+        period_remaining_text = f"Remaining balance for this {period_type.capitalize()}: ₱{remaining_balance:.2f}"
+    else:
+        period_remaining_text = "No income set for this period."
+
+    # Sort transactions by date (latest first)
+    user_transactions.sort(key=lambda x: x["date"], reverse=True)
+
+    # Ask user how many transactions to load
+    try:
+        limit_options = [5, 10, 15, 20]
+        print(f"Available options: {limit_options}")
+        limit = int(input("How many transactions do you want to load? (5/10/15/20): ").strip())
+        if limit not in limit_options:
+            print("⚠️ Invalid option. Defaulting to 5 transactions.")
+            limit = 5
+    except ValueError:
+        print("⚠️ Invalid input. Defaulting to 5 transactions.")
+        limit = 5
+
+    # Select the most recent transactions based on the limit
+    displayed_transactions = user_transactions[:limit]
+
+    # Print period remaining balance and table header
+    print(f"\n{period_remaining_text}")
+    print("+----+----------+----------+----------+------------+")
+    print("| #  | Type     | Amount   | Category | Date       |")
+    print("+----+----------+----------+----------+------------+")
+
+    # Print each transaction
+    for i, t in enumerate(displayed_transactions, start=1):
         print(
-            f"{i}. Type: {transaction['type'].capitalize()}, Amount: ₱{transaction['amount']:.2f}, "
-            f"Category: {transaction['category']}, Date: {transaction['date']}"
+            f"| {i:<2} | {t['type'].capitalize():<8} | ₱{t['amount']:<7.2f} | "
+            f"{t['category']:<8} | {t['date']} |"
         )
-    print("-" * 50)
+
+    # Print table footer
+    print("+----+----------+----------+----------+------------+")
+
 
 def delete_transaction(username):
     print("\n--- DELETE TRANSACTION ---")
@@ -233,13 +332,7 @@ def financial_summary(username):
         category_expenses = sum(
             t["amount"] for t in user_transactions if t["type"] == "expense" and t["category"] == category
         )
-        if category in budgets:
-            limit = budgets[category]["limit"]
-            remaining = max(0, limit - category_expenses)
-            print(f"{category.capitalize()}: Spent = ₱{category_expenses:.2f}, Remaining = ₱{remaining:.2f}")
-        else:
-            print(f"{category.capitalize()}: No budget set.")
-    print("-" * 50)
+        print(f"{category}: ₱{category_expenses:.2f}")
 
 def main_menu():
     load_users()
@@ -299,6 +392,7 @@ def logged_in_menu(username):
             break
         else:
             print("⚠️  Invalid choice. Please try again.")
+
 
 if __name__ == "__main__":
     main_menu()

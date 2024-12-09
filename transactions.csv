@@ -1,0 +1,6 @@
+username,type,amount,category,date
+eme,income,1000.0,Income,2024-12-09
+lala,income,2000.0,Income,2024-12-09
+lala,expense,200.0,Food,2024-12-13
+lala,income,100.0,Income,2024-12-09
+lala,expense,100.0,Books,2024-12-16
