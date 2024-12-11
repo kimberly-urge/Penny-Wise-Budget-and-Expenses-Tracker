@@ -140,11 +140,9 @@ def add_transaction(username):
             print("⚠️  Invalid date format. Use YYYY-MM-DD.")
             return
 
-        # Allow user to input a custom category or select from suggestions
         print(f"Suggested categories: {', '.join(categories)}")
         category = input(f"Enter category (or press Enter to use custom category): ").strip()
 
-        # If the category is not in the suggested categories, it's considered a custom category
         if category and category not in categories:
             print(f"✅ Custom category '{category}' selected.")
         elif category in categories:
@@ -162,13 +160,11 @@ def add_transaction(username):
             "username": username,
             "type": "expense",
             "amount": amount,
-            "category": category if category else "Uncategorized",  # Use custom or default category
+            "category": category if category else "Uncategorized",
             "date": date,
         })
         save_transactions()
         print(f"✅ Expense recorded. Remaining balance: ₱{user_balances[username]:.2f}")
-
-
 
 def view_transactions(username):
     print("\n--- VIEW TRANSACTIONS ---")
@@ -177,7 +173,6 @@ def view_transactions(username):
         print("📂 No transactions found.")
         return
 
-    # Get user's income and period
     total_income = sum(t["amount"] for t in user_transactions if t["type"] == "income")
     income_period = user_income_periods.get(username, None)
     
@@ -185,27 +180,20 @@ def view_transactions(username):
     if income_period:
         period_type = income_period["period_type"]
         start_date = income_period["start_date"]
-        # Calculate how much time has passed since the income was set
         today = datetime.date.today()
         if period_type == "month":
-            # Calculate remaining balance for the month
-            days_in_month = (today.replace(day=28) + datetime.timedelta(days=4)).day  # Get number of days in current month
+            days_in_month = (today.replace(day=28) + datetime.timedelta(days=4)).day
             remaining_days = max(0, days_in_month - today.day)
         elif period_type == "week":
-            # Calculate remaining balance for the week
             days_in_week = 7
             remaining_days = max(0, (start_date + datetime.timedelta(days=days_in_week)).day - today.day)
         
-        # Calculate remaining balance for that period
         remaining_balance = total_income - sum(t["amount"] for t in user_transactions if t["type"] == "expense")
         period_remaining_text = f"Remaining balance for this {period_type.capitalize()}: ₱{remaining_balance:.2f}"
     else:
         period_remaining_text = "No income set for this period."
 
-    # Sort transactions by date (latest first)
     user_transactions.sort(key=lambda x: x["date"], reverse=True)
-
-    # Ask user how many transactions to load
     try:
         limit_options = [5, 10, 15, 20]
         print(f"Available options: {limit_options}")
@@ -217,25 +205,14 @@ def view_transactions(username):
         print("⚠️ Invalid input. Defaulting to 5 transactions.")
         limit = 5
 
-    # Select the most recent transactions based on the limit
     displayed_transactions = user_transactions[:limit]
-
-    # Print period remaining balance and table header
     print(f"\n{period_remaining_text}")
     print("+----+----------+----------+----------+------------+")
     print("| #  | Type     | Amount   | Category | Date       |")
     print("+----+----------+----------+----------+------------+")
-
-    # Print each transaction
     for i, t in enumerate(displayed_transactions, start=1):
-        print(
-            f"| {i:<2} | {t['type'].capitalize():<8} | ₱{t['amount']:<7.2f} | "
-            f"{t['category']:<8} | {t['date']} |"
-        )
-
-    # Print table footer
+        print(f"| {i:<2} | {t['type'].capitalize():<8} | ₱{t['amount']:<7.2f} | {t['category']:<8} | {t['date']} |")
     print("+----+----------+----------+----------+------------+")
-
 
 def delete_transaction(username):
     print("\n--- DELETE TRANSACTION ---")
@@ -286,18 +263,42 @@ def update_transaction(username):
     except ValueError:
         print("⚠️  Please enter a valid number.")
 
-def set_budget():
+def set_budget(username):
     print("\n--- SET BUDGET ---")
     category = input(f"Enter category {categories}: ").strip()
     if category not in categories:
         print(f"⚠️  Invalid category. Must be one of {categories}.")
         return
+
     try:
-        limit = float(input(f"Enter budget limit for '{category}': "))
-        budgets[category] = {"limit": limit, "spent": 0}
-        print(f"✅ Budget for '{category}' set to ₱{limit:.2f}.")
+        limit = float(input(f"Enter budget limit for '{category}': ").strip())
+        if limit <= 0:
+            raise ValueError
     except ValueError:
-        print("⚠️  Invalid amount. Please enter a numeric value.")
+        print("⚠️  Invalid amount. Budget limit must be a positive number.")
+        return
+
+    try:
+        budget_date = input("Enter the date for the budget (YYYY-MM-DD): ").strip()
+        budget_date = datetime.datetime.strptime(budget_date, "%Y-%m-%d").date()
+    except ValueError:
+        print("⚠️  Invalid date format. Use YYYY-MM-DD.")
+        return
+
+    # Deduct the budget limit from the user's balance
+    if user_balances.get(username, 0) < limit:
+        print("⚠️  Insufficient balance to set this budget. Add income first.")
+        return
+
+    user_balances[username] -= limit
+    budgets[category] = {
+        "limit": limit,
+        "spent": 0,
+        "date": budget_date,
+        "username": username,
+    }
+    print(f"✅ Budget for '{category}' set to ₱{limit:.2f} on {budget_date}. Remaining balance: ₱{user_balances[username]:.2f}")
+
 
 def view_budget_status():
     print("\n--- BUDGET STATUS ---")
@@ -319,20 +320,28 @@ def financial_summary(username):
         print("📂 No transactions found.")
         return
 
+    # Calculate total income and expenses
     total_income = sum(t["amount"] for t in user_transactions if t["type"] == "income")
     total_expense = sum(t["amount"] for t in user_transactions if t["type"] == "expense")
     net_balance = total_income - total_expense
 
+    # Deduct budgets from net balance
+    total_budget = sum(b["limit"] for b in budgets.values() if b["username"] == username)
+    net_balance -= total_budget
+
     print(f"Total Income: ₱{total_income:.2f}")
     print(f"Total Expenses: ₱{total_expense:.2f}")
-    print(f"Net Balance: ₱{net_balance:.2f}")
+    print(f"Total Budget Set: ₱{total_budget:.2f}")
+    print(f"Remaining Balance: ₱{net_balance:.2f}")
 
-    print("\nCategory Budget Status:")
+    print("\nCategory-wise Spending:")
     for category in categories:
-        category_expenses = sum(
+        category_expense = sum(
             t["amount"] for t in user_transactions if t["type"] == "expense" and t["category"] == category
         )
-        print(f"{category}: ₱{category_expenses:.2f}")
+        category_budget = budgets.get(category, {}).get("limit", 0)
+        print(f"{category.capitalize()}: Budget = ₱{category_budget:.2f}, Spent = ₱{category_expense:.2f}")
+
 
 def main_menu():
     load_users()
@@ -382,7 +391,7 @@ def logged_in_menu(username):
         elif choice == "4":
             delete_transaction(username)
         elif choice == "5":
-            set_budget()
+            set_budget(username)
         elif choice == "6":
             view_budget_status()
         elif choice == "7":
@@ -392,7 +401,6 @@ def logged_in_menu(username):
             break
         else:
             print("⚠️  Invalid choice. Please try again.")
-
 
 if __name__ == "__main__":
     main_menu()
