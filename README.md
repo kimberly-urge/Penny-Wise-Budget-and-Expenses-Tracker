@@ -1,8 +1,7 @@
 # Penny-Wise
 Penny Wise is a user-friendly budget and transaction management system designed to help users track their income, expenses, and budgets effectively.
 
-
-https://drive.google.com/drive/folders/1TKv6Qp-7yJabPvkQ7e_t0or3GL_jrngz
+https://drive.google.com/drive/folders/1giA5Zsddn0rSAuEHR6vJPfKR3xY-h2nz
 
 Features
 - Users can register by providing their username and password, then log in to view their dashboard.
