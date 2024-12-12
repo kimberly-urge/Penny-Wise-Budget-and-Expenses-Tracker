@@ -84,3 +84,69 @@ def test_financial_summary():
     assert total_income == 1000.0
     assert total_expense == 200.0
     assert net_balance == 800.0
+def delete_transaction(transactions, transaction_index):
+    transactions.pop(transaction_index)
+
+
+def update_transaction(transactions, transaction_index, updated_transaction):
+    transactions[transaction_index] = updated_transaction
+
+
+def test_delete_transaction():
+    username = "testuser"
+    users[username] = "password123"
+    logged_in_users[username] = True
+    transaction_type = "expense"
+    amount = 50.0
+    category = "Food"
+    date = datetime.date.today()
+
+    # Create a transaction
+    transaction = {
+        "username": username,
+        "type": transaction_type,
+        "amount": amount,
+        "category": category,
+        "date": date,
+    }
+    transactions.append(transaction)
+    assert len(transactions) == 1
+
+    # Delete the transaction
+    delete_transaction(transactions, 0)
+    assert len(transactions) == 0
+
+
+def test_update_transaction():
+    username = "testuser"
+    users[username] = "password123"
+    logged_in_users[username] = True
+    transaction_type = "expense"
+    amount = 50.0
+    category = "Food"
+    date = datetime.date.today()
+
+    # Create a transaction
+    transaction = {
+        "username": username,
+        "type": transaction_type,
+        "amount": amount,
+        "category": category,
+        "date": date,
+    }
+    transactions.append(transaction)
+    assert len(transactions) == 1
+
+    # Update the transaction
+    updated_amount = 75.0
+    updated_category = "Transportation"
+    updated_transaction = {
+        "username": username,
+        "type": transaction_type,
+        "amount": updated_amount,
+        "category": updated_category,
+        "date": date,
+    }
+    update_transaction(transactions, 0, updated_transaction)
+    assert len(transactions) == 1
+    assert transactions[0] == updated_transaction
