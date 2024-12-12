@@ -207,12 +207,12 @@ def view_transactions(username):
 
     displayed_transactions = user_transactions[:limit]
     print(f"\n{period_remaining_text}")
-    print("+----+----------+----------+----------+------------+")
-    print("| #  | Type     | Amount   | Category | Date       |")
-    print("+----+----------+----------+----------+------------+")
+    print("+----+------------+------------+------------+------------+")
+    print("| #  |   Type     |   Amount   |   Category | Date       |")
+    print("+----+------------+------------+------------+------------+")
     for i, t in enumerate(displayed_transactions, start=1):
-        print(f"| {i:<2} | {t['type'].capitalize():<8} | ₱{t['amount']:<7.2f} | {t['category']:<8} | {t['date']} |")
-    print("+----+----------+----------+----------+------------+")
+        print(f"| {i:<2} |   {t['type'].capitalize():<8} |   ₱{t['amount']:<7.2f} | {t['category']:<8} | {t['date']} |")
+    print("+----+------------+------------+------------+------------+")
 
 def delete_transaction(username):
     print("\n--- DELETE TRANSACTION ---")
@@ -264,54 +264,80 @@ def update_transaction(username):
         print("⚠️  Please enter a valid number.")
 
 def set_budget(username):
-    print("\n--- SET BUDGET ---")
-    category = input(f"Enter category {categories}: ").strip()
-    if category not in categories:
-        print(f"⚠️  Invalid category. Must be one of {categories}.")
+    print("\n--- SET BUDGET FOR GOAL ---")
+    goal = input("Enter a goal (e.g., Saving, Emergency Fund, etc.): ").strip()
+    if not goal:
+        print("⚠️  Goal cannot be empty.")
         return
 
     try:
-        limit = float(input(f"Enter budget limit for '{category}': ").strip())
-        if limit <= 0:
-            raise ValueError
-    except ValueError:
-        print("⚠️  Invalid amount. Budget limit must be a positive number.")
-        return
-
-    try:
-        budget_date = input("Enter the date for the budget (YYYY-MM-DD): ").strip()
-        budget_date = datetime.datetime.strptime(budget_date, "%Y-%m-%d").date()
+        start_date = input("Enter the start date for the budget (YYYY-MM-DD): ").strip()
+        start_date = datetime.datetime.strptime(start_date, "%Y-%m-%d").date()
     except ValueError:
         print("⚠️  Invalid date format. Use YYYY-MM-DD.")
         return
 
-    # Deduct the budget limit from the user's balance
-    if user_balances.get(username, 0) < limit:
-        print("⚠️  Insufficient balance to set this budget. Add income first.")
+    try:
+        end_date = input("Enter the end date for the budget (YYYY-MM-DD): ").strip()
+        end_date = datetime.datetime.strptime(end_date, "%Y-%m-%d").date()
+    except ValueError:
+        print("⚠️  Invalid date format. Use YYYY-MM-DD.")
         return
 
-    user_balances[username] -= limit
-    budgets[category] = {
-        "limit": limit,
-        "spent": 0,
-        "date": budget_date,
+    if start_date > end_date:
+        print("⚠️  Start date cannot be after end date.")
+        return
+
+    budgets[goal] = {
+        "progress": 0,
+        "start_date": start_date,
+        "end_date": end_date,
         "username": username,
     }
-    print(f"✅ Budget for '{category}' set to ₱{limit:.2f} on {budget_date}. Remaining balance: ₱{user_balances[username]:.2f}")
+
+    # Write budget data to CSV file
+    with open('budgets.csv', 'a', newline='') as csvfile:
+        fieldnames = ['goal', 'progress', 'start_date', 'end_date', 'username']
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+        if csvfile.tell() == 0:
+            writer.writeheader()
+
+        writer.writerow({
+            'goal': goal,
+            'progress': 0,
+            'start_date': start_date,
+            'end_date': end_date,
+            'username': username,
+        })
+
+    print(f"✅ Budget for '{goal}' set from {start_date} to {end_date}.")
+
+    add_budget = input("Do you want to add budget for this goal? (yes/no): ")
+    if add_budget.lower() == "yes":
+        amount = float(input("Enter the amount to add to the budget: "))
+        if amount > user_balances.get(username, 0):
+            print("⚠️  Insufficient balance to add to the budget.")
+        else:
+            user_balances[username] -= amount
+            budgets[goal]['progress'] += amount
+            print(f"✅ Budget for '{goal}' updated to ₱{budgets[goal]['progress']:.2f}. Remaining balance: ₱{user_balances[username]:.2f}")
 
 
-def view_budget_status():
-    print("\n--- BUDGET STATUS ---")
+def view_budgets(username):
+    print("\n--- VIEW BUDGETS ---")
     if not budgets:
-        print("📂 No budgets set.")
+        print("⚠️  No budgets set.")
         return
-    for category, budget in budgets.items():
-        spent = sum(
-            t["amount"] for t in transactions if t["category"] == category and t["type"] == "expense"
-        )
-        remaining = budget["limit"] - spent
-        print(f"{category.capitalize()}: Limit = ₱{budget['limit']}, Spent = ₱{spent}, Remaining = ₱{remaining:.2f}")
-    print("-" * 50)
+
+    for goal, budget in budgets.items():
+        if budget['username'] == username:
+            print(f"Goal: {goal}")
+            print(f"Progress: ₱{budget['progress']:.2f}")
+            print(f"Start Date: {budget['start_date']}")
+            print(f"End Date: {budget['end_date']}")
+            print(f"Remaining Days: {(budget['end_date'] - datetime.date.today()).days}")
+            print()
 
 def financial_summary(username):
     print("\n--- FINANCIAL SUMMARY ---")
@@ -326,7 +352,7 @@ def financial_summary(username):
     net_balance = total_income - total_expense
 
     # Deduct budgets from net balance
-    total_budget = sum(b["limit"] for b in budgets.values() if b["username"] == username)
+    total_budget = sum(b["progress"] for b in budgets.values() if b["username"] == username)
     net_balance -= total_budget
 
     print(f"Total Income: ₱{total_income:.2f}")
@@ -335,13 +361,13 @@ def financial_summary(username):
     print(f"Remaining Balance: ₱{net_balance:.2f}")
 
     print("\nCategory-wise Spending:")
-    for category in categories:
-        category_expense = sum(
-            t["amount"] for t in user_transactions if t["type"] == "expense" and t["category"] == category
-        )
-        category_budget = budgets.get(category, {}).get("limit", 0)
-        print(f"{category.capitalize()}: Budget = ₱{category_budget:.2f}, Spent = ₱{category_expense:.2f}")
-
+    for category in budgets:
+        if budgets[category]["username"] == username:
+            category_expense = sum(
+                t["amount"] for t in user_transactions if t["type"] == "expense" and t["category"] == category
+            )
+            category_budget = budgets[category]["progress"]
+            print(f"{category.capitalize()}: Budget = ₱{category_budget:.2f}")
 
 def main_menu():
     load_users()
@@ -362,7 +388,7 @@ def main_menu():
             if username:
                 logged_in_menu(username)
         elif choice == "3":
-            print("👋 Thank you for using Budget Tracker. Goodbye!")
+            print("👋 Thank you for using Penny Wise. Goodbye!\n\n")
             break
         else:
             print("⚠️  Invalid choice. Please try again.")
@@ -376,8 +402,8 @@ def logged_in_menu(username):
         print("2. View Transactions")
         print("3. Update Transaction")
         print("4. Delete Transaction")
-        print("5. Set Budget")
-        print("6. View Budget Status")
+        print("5. Set Budget Goal")
+        print("6. View Budget Goals")
         print("7. View Financial Summary")
         print("8. Logout")
         print("===============================")
@@ -393,7 +419,7 @@ def logged_in_menu(username):
         elif choice == "5":
             set_budget(username)
         elif choice == "6":
-            view_budget_status()
+            view_budgets(username)
         elif choice == "7":
             financial_summary(username)
         elif choice == "8":
