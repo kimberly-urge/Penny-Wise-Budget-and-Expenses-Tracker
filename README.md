@@ -9,3 +9,15 @@ Features
 - Budget management allows users to track their expenditures and set budgets for particular areas (such as food and transportation).
 - Financial Summary: For every category, users may see a summary of their total revenue, expenses, net balance, and budget status.
 
+Requirements
+Python 3
+CSV support (built-in with Python)
+
+How to Use
+Run the program.
+Choose to register or log in.
+After logging in, access options to:
+Add income or expense transactions.
+Set or view budget goals.
+Check your financial summary.
+Log out when done.
